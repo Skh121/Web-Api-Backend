@@ -4,7 +4,6 @@ const jwt = require("jsonwebtoken");
 
 const registerUser = async (req, res) => {
   const { fullName, email, password,role} = req.body;
-
   try {
     if (!fullName || !email || !password) {
       return res
@@ -87,7 +86,6 @@ const loginUser = async (req, res) => {
       token: token,
     });
   } catch (e) {
-    console.error("Login Error:", e);
     return res.status(500).json({
       success: false,
       msg: "Internal Server Error",
