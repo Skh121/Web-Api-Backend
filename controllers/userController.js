@@ -3,7 +3,7 @@ const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 
 const registerUser = async (req, res) => {
-  const { fullName, email, password} = req.body;
+  const { fullName, email, password,role} = req.body;
 
   try {
     if (!fullName || !email || !password) {
@@ -24,6 +24,7 @@ const registerUser = async (req, res) => {
     const newUser = new User({
       fullName,
       email,
+      role,
       password: hashedPassword,
     });
 
@@ -72,6 +73,7 @@ const loginUser = async (req, res) => {
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
+      role:user.role
     };
 
     const token = jwt.sign(payload, process.env.SECRET, {
