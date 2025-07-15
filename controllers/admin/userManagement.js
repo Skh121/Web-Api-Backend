@@ -15,8 +15,16 @@ exports.getAllUsers = async (req, res) => {
     const activeUserIds = await Subscription.distinct("userId", {
       status: "active",
     });
-    const activeUserCount = await User.countDocuments({ _id: { $in: activeUserIds } });
-    const inactiveUsersCount = totalUsers - activeUserCount
+    const activeUserCount = await User.countDocuments({
+      role: { $in: ["member", "admin"] },
+    });
+    const inactiveUsersCount = await User.countDocuments({
+      role: "user",
+    });
+    // const activeUserCount = await User.countDocuments({
+    //   _id: { $in: activeUserIds },
+    // });
+    // const inactiveUsersCount = totalUsers - activeUserCount;
     const revenueData = await Subscription.aggregate([
       // <-- NEW
       { $group: { _id: null, total: { $sum: "$price" } } },
