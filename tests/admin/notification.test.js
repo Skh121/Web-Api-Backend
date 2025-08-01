@@ -2,12 +2,12 @@ const request = require("supertest");
 const express = require("express");
 const jwt = require("jsonwebtoken");
 const mockingoose = require("mockingoose");
-const Notification = require("../models/Notification");
+const Notification = require("../../models/Notification");
 
-const notificationRoutes = require("../routes/admin/notificationRoutes");
+const notificationRoutes = require("../../routes/admin/notificationRoutes");
 
 // Mock authentication middleware
-jest.mock("../middlewares/authenticateUser", () => ({
+jest.mock("../../middlewares/authenticateUser", () => ({
   authorizedUser: (req, res, next) => {
     req.user = { id: "user123" };
     next();

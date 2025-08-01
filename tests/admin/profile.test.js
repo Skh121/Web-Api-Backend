@@ -4,10 +4,10 @@ const mockingoose = require("mockingoose");
 const jwt = require("jsonwebtoken");
 const path = require("path");
 
-const profileRoutes = require("../routes/admin/profileRoutes");
-const Profile = require("../models/Profile");
-const User = require("../models/User");
-const Subscription = require("../models/Subscription");
+const profileRoutes = require("../../routes/admin/profileRoutes");
+const Profile = require("../../models/Profile");
+const User = require("../../models/User");
+const Subscription = require("../../models/Subscription");
 
 const app = express();
 app.use(express.json());
@@ -29,7 +29,7 @@ const userToken = jwt.sign(
 );
 
 // Mock auth middleware
-jest.mock("../middlewares/authenticateUser", () => ({
+jest.mock("../../middlewares/authenticateUser", () => ({
   authorizedUser: (req, res, next) => {
     req.user = { id: userId };
     next();

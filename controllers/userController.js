@@ -2,8 +2,8 @@ const User = require("../models/User");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const nodemailer = require("nodemailer");
+const crypto = require("crypto")
 
-// ✅ Define a test-friendly transporter factory
 const getTransporter = () =>
   nodemailer.createTransport({
     service: "gmail",
@@ -36,7 +36,7 @@ const registerUser = async (req, res) => {
     const newUser = new User({
       fullName,
       email,
-      role,
+      role: role || "user",
       password: hashedPassword,
     });
 
@@ -87,7 +87,7 @@ const loginUser = async (req, res) => {
       _id: user._id,
       fullName: user.fullName,
       email: user.email,
-      role: user.role,
+      role: user.role || "user",
     };
 
     const token = jwt.sign(payload, process.env.SECRET, {
@@ -120,8 +120,7 @@ const sendResetLink = async (req, res) => {
     });
 
     const resetUrl = `${process.env.CLIENT_URL}/reset-password/${token}`;
-    const transporter = getTransporter(); // ✅ Use dynamic transporter
-
+    const transporter = getTransporter();
     const mailOptions = {
       from: `"TradeVerse" <${process.env.EMAIL_USER}>`,
       to: email,
@@ -160,4 +159,156 @@ const resetPassword = async (req, res) => {
   }
 };
 
-module.exports = { registerUser, loginUser, sendResetLink, resetPassword };
+const requestOtp = async (req, res) => {
+  const { email } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+
+    // Generate a 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    // Set OTP to expire in 10 minutes
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    user.otp = otp;
+    user.otpExpires = otpExpires;
+    await user.save();
+
+    const transporter = getTransporter();
+    const mailOptions = {
+      from: `"TradeVerse" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: "Your Password Reset OTP",
+      html: `
+        <p>Your One-Time Password (OTP) for password reset is:</p>
+        <h2>${otp}</h2>
+        <p>This OTP is valid for 10 minutes.</p>
+        <p>If you did not request this, please ignore this email.</p>
+      `,
+    };
+
+    await transporter.sendMail(mailOptions);
+    return res
+      .status(200)
+      .json({ success: true, message: "OTP sent to your email." });
+  } catch (err) {
+    console.error("Error in requestOtp:", err);
+    return res
+      .status(500)
+      .json({ success: false, message: "Server error while sending OTP." });
+  }
+};
+
+// NEW: Verify OTP
+const verifyOtp = async (req, res) => {
+  const { email, otp } = req.body;
+
+  try {
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+
+    if (!user.otp || user.otp !== otp) {
+      return res.status(400).json({ success: false, message: "Invalid OTP." });
+    }
+
+    if (user.otpExpires < new Date()) {
+      // Clear OTP fields if expired
+      user.otp = null;
+      user.otpExpires = null;
+      await user.save();
+      return res
+        .status(400)
+        .json({ success: false, message: "OTP has expired." });
+    }
+
+    // OTP is valid. Clear OTP fields to prevent reuse.
+    user.otp = null;
+    user.otpExpires = null;
+    await user.save();
+
+    // Generate a temporary token for the password reset stage
+    const resetToken = jwt.sign(
+      { id: user._id, email: user.email, purpose: "password_reset" },
+      process.env.SECRET,
+      {
+        expiresIn: "10m", // Token valid for 10 minutes for password change
+      }
+    );
+
+    return res
+      .status(200)
+      .json({
+        success: true,
+        message: "OTP verified successfully.",
+        resetToken: resetToken,
+      });
+  } catch (err) {
+    console.error("Error in verifyOtp:", err);
+    return res
+      .status(500)
+      .json({
+        success: false,
+        message: "Server error during OTP verification.",
+      });
+  }
+};
+
+// NEW: Reset Password with OTP (requires a valid resetToken from verifyOtp)
+const resetPasswordWithOtp = async (req, res) => {
+  const { resetToken, newPassword } = req.body;
+
+  try {
+    const decoded = jwt.verify(resetToken, process.env.SECRET);
+
+    // Ensure the token is for password reset purpose
+    if (decoded.purpose !== "password_reset") {
+      return res
+        .status(403)
+        .json({ success: false, message: "Invalid reset token purpose." });
+    }
+
+    const user = await User.findById(decoded.id);
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    return res
+      .status(200)
+      .json({ success: true, message: "Password updated successfully." });
+  } catch (err) {
+    console.error("Error in resetPasswordWithOtp:", err);
+    if (err.name === "TokenExpiredError") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Reset token has expired." });
+    }
+    return res
+      .status(400)
+      .json({ success: false, message: "Invalid or expired reset token." });
+  }
+};
+
+module.exports = {
+  registerUser,
+  loginUser,
+  sendResetLink,
+  resetPassword,
+  resetPasswordWithOtp,
+  verifyOtp,
+  requestOtp
+};

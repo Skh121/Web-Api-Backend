@@ -1,13 +1,17 @@
 const Conversation = require("../../models/Conversation");
 const Message = require("../../models/Message");
 const User = require("../../models/User");
+const { getIo } = require("../../middlewares/socketManager");
 
 // Get all conversations for a user (for the sidebar)
 const getConversations = async (req, res) => {
   try {
     const conversations = await Conversation.find({
       participants: req.user.id,
-    }).populate("participants", "fullName");
+    })
+      .populate("participants", "fullName role")
+      .sort({ updatedAt: -1 });
+
     res.json(conversations);
   } catch (error) {
     console.error("getConversations error:", error);
@@ -20,7 +24,11 @@ const getMessages = async (req, res) => {
   try {
     const messages = await Message.find({
       conversationId: req.params.conversationId,
-    });
+    })
+      .populate("sender", "fullName role")
+      .populate("recipient", "fullName role")
+      .sort({ createdAt: 1 });
+
     res.json(messages);
   } catch (error) {
     console.error("getMessages error:", error);
@@ -31,7 +39,14 @@ const getMessages = async (req, res) => {
 // Create a new message and save it to the DB
 const createMessage = async (req, res) => {
   try {
-    const { conversationId, recipient, text } = req.body;
+    const { conversationId, recipient, text, tempId } = req.body;
+    const senderId = req.user.id;
+
+    if (!text && !req.file) {
+      return res
+        .status(400)
+        .json({ message: "Message text or file is required." });
+    }
 
     let fileUrl = "";
     if (req.file) {
@@ -42,7 +57,7 @@ const createMessage = async (req, res) => {
 
     const messageData = {
       conversationId,
-      sender: req.user.id,
+      sender: senderId,
       recipient,
       text,
       file: fileUrl,
@@ -50,7 +65,37 @@ const createMessage = async (req, res) => {
 
     const message = await Message.create(messageData);
 
-    res.status(201).json(message);
+    const populatedMessage = await Message.findById(message._id)
+      .populate("sender", "fullName role")
+      .populate("recipient", "fullName role");
+
+    const messageToEmit = populatedMessage.toObject();
+    if (tempId) {
+      messageToEmit.tempId = tempId;
+    }
+
+    const io = getIo();
+    io.to(conversationId.toString()).emit("receive_message", messageToEmit); // <-- Use receive_message and conversationId room
+
+    if (senderId.toString() !== recipient.toString()) {
+      io.to(recipient.toString()).emit(
+        "new_message", // Or change to "receive_message" for full consistency
+        messageToEmit
+      );
+    }
+    io.to(senderId.toString()).emit(
+      "new_message", // Or change to "receive_message" for full consistency
+      messageToEmit
+    );
+
+    await Conversation.findByIdAndUpdate(
+      conversationId,
+      { updatedAt: new Date() },
+      { new: true }
+    );
+
+    // FIX: Respond with the populated message instead of the unpopulated one
+    res.status(201).json(populatedMessage); // <--- THIS IS THE CHANGE
   } catch (error) {
     console.error("createMessage error:", error);
     res.status(500).json({ message: "Server Error" });
@@ -92,6 +137,7 @@ const findOrCreateConversation = async (req, res) => {
     let conversation = await Conversation.findOne({
       participants: { $all: [currentUserId, recipientId] },
     }).populate("participants", "fullName role");
+    let isNew = false;
 
     if (!conversation) {
       const newConversation = await Conversation.create({
@@ -102,9 +148,10 @@ const findOrCreateConversation = async (req, res) => {
         "participants",
         "fullName role"
       );
+      isNew = true;
     }
 
-    res.json(conversation);
+    res.json({ conversation: conversation.toObject(), isNew: isNew });
   } catch (error) {
     console.error("findOrCreateConversation error:", error);
     res.status(500).json({ message: "Server Error" });

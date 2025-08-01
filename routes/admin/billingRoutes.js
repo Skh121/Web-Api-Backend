@@ -14,5 +14,4 @@ router.get("/status", authorizedUser, isMemberAdmin, getSubscriptionStatus);
 router.get("/history", authorizedUser, isMemberAdmin, getPaymentHistory);
 router.post("/subscribe", authorizedUser, isMemberAdmin, createSubscription);
 
-
 module.exports = router;

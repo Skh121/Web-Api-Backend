@@ -11,4 +11,5 @@ router.get("/", authorizedUser, isMemberAdmin, goalController.getGoals);
 router.put("/:id", authorizedUser, isMemberAdmin, goalController.updateGoal);
 router.delete("/:id", authorizedUser, isMemberAdmin, goalController.deleteGoal);
 
+
 module.exports = router;

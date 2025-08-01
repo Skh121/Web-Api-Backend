@@ -4,17 +4,17 @@ const mockingoose = require("mockingoose");
 const bcrypt = require("bcrypt");
 const express = require("express");
 
-const securityRoutes = require("../routes/admin/securityRoutes");
-const User = require("../models/User");
-const Notification = require("../models/Notification");
-const Payment = require("../models/Payment");
-const Trade = require("../models/Trade");
-const Profile = require("../models/Profile");
-const Subscription = require("../models/Subscription");
+const securityRoutes = require("../../routes/admin/securityRoutes");
+const User = require("../../models/User");
+const Notification = require("../../models/Notification");
+const Payment = require("../../models/Payment");
+const Trade = require("../../models/Trade");
+const Profile = require("../../models/Profile");
+const Subscription = require("../../models/Subscription");
 
 // Mock socket.io getIo emitter
 const mockEmit = jest.fn();
-jest.mock("../middlewares/socketManager", () => ({
+jest.mock("../../middlewares/socketManager", () => ({
   getIo: () => ({
     to: () => ({
       emit: mockEmit,
@@ -46,7 +46,7 @@ const user = {
 };
 
 // Mock middleware (authorizedUser + isMemberAdmin)
-jest.mock("../middlewares/authenticateUser", () => ({
+jest.mock("../../middlewares/authenticateUser", () => ({
   authorizedUser: (req, res, next) => {
     req.user = { id: user._id };
     next();
